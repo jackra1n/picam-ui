@@ -2,27 +2,50 @@
 
 Simple terminal interface for rapid photo capture with Raspberry Pi camera module.
 
+## ⚠️ Important: Virtual Environment Setup
+
+**You MUST use a virtual environment with system site packages to access picamera2:**
+
+```bash
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Regular virtual environments (`python3 -m venv .venv`) will NOT work with picamera2 as it requires system-level camera access.
+
+## Preview
+
+![picam-ui interface](docs/preview.png)
+
 ## Features
 
-- 🎨 Clean interface with optional Rich styling
+- 🎨 Clean terminal UI with Textual
 - 📊 Live statistics and photo tracking
 - 📸 One-key photo capture (spacebar)
 - 📁 Automatic timestamped filenames
 - 🕒 Recent photos display
+- 🚀 Fast camera initialization feedback
 
 ## Quick Start
 
-1. **Install dependencies**:
+1. **Create virtual environment with system packages**:
    ```bash
-   pip install picamera2 rich
+   python3 -m venv --system-site-packages .venv
+   source .venv/bin/activate
    ```
 
-2. **Run the application**:
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Run the application**:
    ```bash
    python3 main.py
    ```
 
-3. **Take photos**:
+4. **Take photos**:
    - Press **SPACEBAR** to capture
    - Press **R** to refresh stats
    - Press **Q** to quit
@@ -61,31 +84,30 @@ photos/
 | `SPACEBAR` | Take a picture |
 | `R` | Refresh statistics |
 | `Q` | Quit application |
-| `Ctrl+C` | Force quit |
 
 ## Requirements
 
 - Raspberry Pi with camera module
 - Python 3.7+
-- picamera2
-- rich (optional, for styling)
+- picamera2 (system package)
+- textual
 
 ## Installation
 
-```bash
-pip install picamera2 rich
-```
+**Important**: Use virtual environment with system site packages:
 
-Or install from requirements:
 ```bash
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
 ## Interface
 
-The interface shows:
-- Camera status with initialization progress
+The Textual-based interface shows:
+- Camera status with real-time initialization progress
 - Session and total photo counts
 - Last photo taken
 - Recent photos list (last 5)
-- Capture status indicator
+- Live capture status indicator
+- Clean, stable layout that works on all terminals

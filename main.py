@@ -15,12 +15,12 @@ except ImportError:
     PICAMERA_AVAILABLE = False
 
 try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich import box
-    RICH_AVAILABLE = True
+    from textual.app import App
+    from textual.widgets import Static
+    from textual.containers import Container
+    TEXTUAL_AVAILABLE = True
 except ImportError:
-    RICH_AVAILABLE = False
+    TEXTUAL_AVAILABLE = False
 
 @dataclass
 class Model:
@@ -39,42 +39,104 @@ class Model:
             self.recent_photos = []
 
 
-class QuickPiCam:
+class PicamUI(App):
+    CSS = """
+    Screen {
+        background: #1e1e1e;
+    }
+    
+    .header {
+        height: 3;
+        text-align: center;
+        background: #2d2d2d;
+        color: #87ceeb;
+    }
+    
+    .content {
+        padding: 1;
+    }
+    
+    .status {
+        height: 2;
+        margin-bottom: 1;
+    }
+    
+    .stats {
+        height: 3;
+        margin-bottom: 1;
+    }
+    
+    .ready {
+        height: 2;
+        margin-bottom: 1;
+    }
+    
+    .photos {
+        height: 7;
+        margin-bottom: 1;
+    }
+    
+    .controls {
+        height: 2;
+        text-align: center;
+        background: #2d2d2d;
+    }
+    """
+    
     def __init__(self, output_dir="photos"):
+        super().__init__()
         self.model = Model(output_dir=Path(output_dir))
         self.model.output_dir.mkdir(exist_ok=True)
-        self.console = Console() if RICH_AVAILABLE else None
-        self.running = True
+        
+    def compose(self):
+        yield Container(
+            Static("📷 picam-ui", classes="header"),
+            Container(
+                Static("", id="status", classes="status"),
+                Static("", id="stats", classes="stats"), 
+                Static("", id="ready", classes="ready"),
+                Static("", id="photos", classes="photos"),
+                classes="content"
+            ),
+            Static("SPACE - Capture | R - Refresh | Q - Quit", classes="controls")
+        )
+    
+    def on_mount(self):
+        self.init_camera()
         
     def init_camera(self):
         try:
             self.model.camera_status = "Detecting camera..."
-            self.render()
+            self.update_display()
             time.sleep(0.5)
             
             if not PICAMERA_AVAILABLE:
                 self.model.camera_status = "❌ picamera2 not found!"
+                self.update_display()
                 return False
             
             self.model.camera_status = "Initializing picamera2..."
-            self.render()
+            self.update_display()
             self.model.camera = Picamera2()
             
             self.model.camera_status = "Configuring camera..."
-            self.render()
+            self.update_display()
             self.model.camera.configure(self.model.camera.create_still_configuration())
             
             self.model.camera_status = "Starting camera..."
-            self.render()
+            self.update_display()
             self.model.camera.start()
             time.sleep(2)
             
             self.model.camera_ready = True
             self.model.camera_status = "✅ Ready"
+            self.update_stats()
+            self.update_display()
             return True
             
         except Exception as e:
             self.model.camera_status = f"❌ Error: {str(e)}"
+            self.update_display()
             return False
     
     def update_stats(self):
@@ -94,7 +156,7 @@ class QuickPiCam:
             return False
         
         self.model.is_capturing = True
-        self.render()
+        self.update_display()
         
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -112,130 +174,65 @@ class QuickPiCam:
             return True
             
         except Exception as e:
-            print(f"❌ Capture failed: {e}")
+            self.notify(f"❌ Capture failed: {e}")
             return False
         finally:
             self.model.is_capturing = False
+            self.update_display()
     
-    def view_rich(self):
-        status_color = "green" if self.model.camera_ready else "red"
+    def update_display(self):
         status_icon = "🟢" if self.model.camera_ready else "🔴"
         
-        content = f"""[bold blue]📷 picam-ui[/bold blue] | {status_icon} [{status_color}]{self.model.camera_status}[/{status_color}]
-
-[bold]📊 Session:[/bold] [green]{self.model.session_count}[/green]  [bold]Total:[/bold] [blue]{self.model.total_count}[/blue]  [bold]Last:[/bold] [yellow]{self.model.last_photo}[/yellow]
-
-{'[bold red]📸 CAPTURING...[/bold red]' if self.model.is_capturing else '[bold green]🎯 READY[/bold green]'}
-
-[bold]📸 Recent Photos:[/bold]"""
+        # Status
+        self.query_one("#status").update(f"{status_icon} {self.model.camera_status}")
         
+        # Stats
+        stats_text = f"📊 Session: {self.model.session_count}  Total: {self.model.total_count}\n📁 Last: {self.model.last_photo}"
+        self.query_one("#stats").update(stats_text)
+        
+        # Ready status
+        if self.model.is_capturing:
+            self.query_one("#ready").update("📸 CAPTURING...")
+        else:
+            ready_text = "🎯 READY" if self.model.camera_ready else "⏳ INITIALIZING"
+            self.query_one("#ready").update(ready_text)
+        
+        # Recent photos
+        photos_text = "📸 Recent Photos:\n"
         if self.model.recent_photos:
-            for photo in self.model.recent_photos[-3:]:
-                content += f"\n• {photo}"
+            for photo in self.model.recent_photos[-5:]:
+                photos_text += f"  • {photo}\n"
         else:
-            content += "\n[dim]No photos yet...[/dim]"
-            
-        content += "\n\n[green]SPACE[/green] - Capture | [yellow]R[/yellow] - Refresh | [red]Q[/red] - Quit"
-        
-        panel = Panel(content, box=box.ROUNDED, padding=(1, 2))
-        self.console.print(panel)
+            photos_text += "  No photos yet..."
+        self.query_one("#photos").update(photos_text)
     
-    def view_simple(self) -> str:
-        status_icon = "🟢" if self.model.camera_ready else "🔴"
-        capture_status = "📸 CAPTURING..." if self.model.is_capturing else "🎯 READY"
-        
-        recent = self.model.recent_photos[-3:] if self.model.recent_photos else []
-        recent_lines = [f"  • {photo}" for photo in recent]
-        while len(recent_lines) < 3:
-            recent_lines.append("")
-        
-        return f"""
-╔══════════════════════════════════════════════════════════════╗
-║ 📷 picam-ui                                                   ║
-║ {status_icon} {self.model.camera_status:<50} ║
-╠══════════════════════════════════════════════════════════════╣
-║ 📊 Session: {self.model.session_count:<3} Total: {self.model.total_count:<3} Last: {self.model.last_photo:<25} ║
-║                                                              ║
-║ {capture_status:<30}                              ║
-║                                                              ║
-║ 📸 Recent Photos:                                            ║
-║{recent_lines[0]:<62}║
-║{recent_lines[1]:<62}║
-║{recent_lines[2]:<62}║
-╠══════════════════════════════════════════════════════════════╣
-║ SPACE - Capture | R - Refresh | Q - Quit                    ║
-╚══════════════════════════════════════════════════════════════╝
-        """
-    
-    def render(self):
-        os.system('clear' if os.name == 'posix' else 'cls')
-        
-        if RICH_AVAILABLE and self.console:
-            self.view_rich()
-        else:
-            print(self.view_simple())
-    
-    def handle_input(self, key: str):
-        key = key.lower()
-        
-        if key in ['q', '\x03']:
-            self.running = False
-        elif key == ' ':
-            if self.capture_photo():
-                pass
-        elif key == 'r':
+    def on_key(self, event):
+        if event.key == "q":
+            self.exit()
+        elif event.key == "space":
+            self.capture_photo()
+        elif event.key == "r":
             self.update_stats()
-        
-        self.render()
+            self.update_display()
     
-    def run(self):
-        print("🚀 Starting picam-ui...")
-        
-        if not self.init_camera():
-            print("Failed to initialize camera. Exiting.")
-            return
-        
-        self.update_stats()
-        self.render()
-        
-        try:
-            import termios
-            import tty
-            
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            
-            try:
-                tty.setraw(fd)
-                while self.running:
-                    key = sys.stdin.read(1)
-                    self.handle_input(key)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-                
-        except ImportError:
-            while self.running:
-                try:
-                    key = input("\nPress SPACE to capture, R to refresh, Q to quit: ").strip()
-                    self.handle_input(key)
-                except KeyboardInterrupt:
-                    break
-        
+    def on_exit(self):
         if self.model.camera:
             try:
                 self.model.camera.stop()
             except:
                 pass
-        
-        print("\n👋 Goodbye!")
 
 
 def main():
+    if not TEXTUAL_AVAILABLE:
+        print("❌ textual package not found! Please install: pip install textual")
+        sys.exit(1)
+    
     output_dir = "photos"
     if len(sys.argv) > 1:
         output_dir = sys.argv[1]
     
-    app = QuickPiCam(output_dir)
+    app = PicamUI(output_dir)
     app.run()
 
 
