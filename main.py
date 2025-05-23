@@ -3,7 +3,6 @@
 import os
 import sys
 import time
-import asyncio
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
@@ -18,9 +17,6 @@ except ImportError:
 try:
     from rich.console import Console
     from rich.panel import Panel
-    from rich.layout import Layout
-    from rich.live import Live
-    from rich.text import Text
     from rich import box
     RICH_AVAILABLE = True
 except ImportError:
@@ -121,83 +117,73 @@ class QuickPiCam:
         finally:
             self.model.is_capturing = False
     
-    def view_rich(self) -> Layout:
-        layout = Layout()
-        layout.split_column(
-            Layout(name="header", size=3),
-            Layout(name="body"),
-            Layout(name="footer", size=3)
-        )
-        
+    def view_rich(self):
         status_color = "green" if self.model.camera_ready else "red"
-        layout["header"].update(
-            Panel(
-                f"[bold blue]📷 picam-ui[/bold blue] | [{status_color}]{self.model.camera_status}[/{status_color}]",
-                box=box.ROUNDED
-            )
+        
+        header = Panel(
+            f"[bold blue]📷 picam-ui[/bold blue] | [{status_color}]{self.model.camera_status}[/{status_color}]",
+            box=box.ROUNDED,
+            height=3
         )
         
-        layout["body"].split_row(
-            Layout(name="stats"),
-            Layout(name="recent")
-        )
-        
-        stats_text = f"""[bold]📊 Statistics[/bold]
-[green]Session:[/green] {self.model.session_count}
-[blue]Total:[/blue] {self.model.total_count}
-[yellow]Last:[/yellow] {self.model.last_photo}
+        stats_text = f"""[bold]📊 Stats[/bold]
+Session: [green]{self.model.session_count}[/green]  Total: [blue]{self.model.total_count}[/blue]
+Last: [yellow]{self.model.last_photo}[/yellow]
 
-[bold red]{'📸 CAPTURING...' if self.model.is_capturing else '🎯 READY'}[/bold red]"""
+{'[bold red]📸 CAPTURING...[/bold red]' if self.model.is_capturing else '[bold green]🎯 READY[/bold green]'}"""
         
-        layout["stats"].update(Panel(stats_text, title="Stats", box=box.ROUNDED))
+        stats_panel = Panel(stats_text, box=box.ROUNDED, height=8)
         
         if self.model.recent_photos:
-            recent_text = "\n".join([f"• {photo}" for photo in self.model.recent_photos[-5:]])
+            recent_text = "[bold]📸 Recent Photos[/bold]\n" + "\n".join([f"• {photo}" for photo in self.model.recent_photos[-3:]])
         else:
-            recent_text = "[dim]No photos yet...[/dim]"
+            recent_text = "[bold]📸 Recent Photos[/bold]\n[dim]No photos yet...[/dim]"
         
-        layout["recent"].update(Panel(recent_text, title="Recent Photos", box=box.ROUNDED))
+        recent_panel = Panel(recent_text, box=box.ROUNDED, height=6)
         
-        layout["footer"].update(
-            Panel(
-                "[green]SPACE[/green] - Capture | [yellow]R[/yellow] - Refresh | [red]Q[/red] - Quit",
-                box=box.ROUNDED
-            )
+        footer = Panel(
+            "[green]SPACE[/green] - Capture | [yellow]R[/yellow] - Refresh | [red]Q[/red] - Quit",
+            box=box.ROUNDED,
+            height=3
         )
         
-        return layout
+        self.console.print(header)
+        self.console.print(stats_panel)
+        self.console.print(recent_panel)
+        self.console.print(footer)
     
     def view_simple(self) -> str:
         status_icon = "🟢" if self.model.camera_ready else "🔴"
         capture_status = "📸 CAPTURING..." if self.model.is_capturing else "🎯 READY"
         
-        recent = "\n".join([f"  • {photo}" for photo in self.model.recent_photos[-5:]])
-        if not recent:
-            recent = "  No photos yet..."
+        recent = self.model.recent_photos[-3:] if self.model.recent_photos else []
+        recent_lines = [f"  • {photo}" for photo in recent]
+        while len(recent_lines) < 3:
+            recent_lines.append("")
         
         return f"""
-╔════════════════════════════════════════════════════════════════╗
-║ 📷 picam-ui                                                     ║
+╔══════════════════════════════════════════════════════════════╗
+║ 📷 picam-ui                                                   ║
 ║ {status_icon} {self.model.camera_status:<50} ║
-╠════════════════════════════════════════════════════════════════╣
-║                                                                ║
-║ 📊 Statistics:                    📸 Recent Photos:            ║
-║   Session: {self.model.session_count:<15}      {recent.split(chr(10))[0] if recent else ""}
-║   Total: {self.model.total_count:<17}      {recent.split(chr(10))[1] if len(recent.split(chr(10))) > 1 else ""}
-║   Last: {self.model.last_photo:<30} {recent.split(chr(10))[2] if len(recent.split(chr(10))) > 2 else ""}
-║                                   {recent.split(chr(10))[3] if len(recent.split(chr(10))) > 3 else ""}
-║ {capture_status:<30}                {recent.split(chr(10))[4] if len(recent.split(chr(10))) > 4 else ""}
-║                                                                ║
-╠════════════════════════════════════════════════════════════════╣
-║ SPACE - Capture | R - Refresh | Q - Quit                      ║
-╚════════════════════════════════════════════════════════════════╝
+╠══════════════════════════════════════════════════════════════╣
+║ 📊 Session: {self.model.session_count:<3} Total: {self.model.total_count:<3} Last: {self.model.last_photo:<25} ║
+║                                                              ║
+║ {capture_status:<30}                              ║
+║                                                              ║
+║ 📸 Recent Photos:                                            ║
+║{recent_lines[0]:<62}║
+║{recent_lines[1]:<62}║
+║{recent_lines[2]:<62}║
+╠══════════════════════════════════════════════════════════════╣
+║ SPACE - Capture | R - Refresh | Q - Quit                    ║
+╚══════════════════════════════════════════════════════════════╝
         """
     
     def render(self):
         os.system('clear' if os.name == 'posix' else 'cls')
         
         if RICH_AVAILABLE and self.console:
-            self.console.print(self.view_rich())
+            self.view_rich()
         else:
             print(self.view_simple())
     
