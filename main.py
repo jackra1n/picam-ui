@@ -119,38 +119,26 @@ class QuickPiCam:
     
     def view_rich(self):
         status_color = "green" if self.model.camera_ready else "red"
+        status_icon = "🟢" if self.model.camera_ready else "🔴"
         
-        header = Panel(
-            f"[bold blue]📷 picam-ui[/bold blue] | [{status_color}]{self.model.camera_status}[/{status_color}]",
-            box=box.ROUNDED,
-            height=3
-        )
-        
-        stats_text = f"""[bold]📊 Stats[/bold]
-Session: [green]{self.model.session_count}[/green]  Total: [blue]{self.model.total_count}[/blue]
-Last: [yellow]{self.model.last_photo}[/yellow]
+        content = f"""[bold blue]📷 picam-ui[/bold blue] | {status_icon} [{status_color}]{self.model.camera_status}[/{status_color}]
 
-{'[bold red]📸 CAPTURING...[/bold red]' if self.model.is_capturing else '[bold green]🎯 READY[/bold green]'}"""
-        
-        stats_panel = Panel(stats_text, box=box.ROUNDED, height=8)
+[bold]📊 Session:[/bold] [green]{self.model.session_count}[/green]  [bold]Total:[/bold] [blue]{self.model.total_count}[/blue]  [bold]Last:[/bold] [yellow]{self.model.last_photo}[/yellow]
+
+{'[bold red]📸 CAPTURING...[/bold red]' if self.model.is_capturing else '[bold green]🎯 READY[/bold green]'}
+
+[bold]📸 Recent Photos:[/bold]"""
         
         if self.model.recent_photos:
-            recent_text = "[bold]📸 Recent Photos[/bold]\n" + "\n".join([f"• {photo}" for photo in self.model.recent_photos[-3:]])
+            for photo in self.model.recent_photos[-3:]:
+                content += f"\n• {photo}"
         else:
-            recent_text = "[bold]📸 Recent Photos[/bold]\n[dim]No photos yet...[/dim]"
+            content += "\n[dim]No photos yet...[/dim]"
+            
+        content += "\n\n[green]SPACE[/green] - Capture | [yellow]R[/yellow] - Refresh | [red]Q[/red] - Quit"
         
-        recent_panel = Panel(recent_text, box=box.ROUNDED, height=6)
-        
-        footer = Panel(
-            "[green]SPACE[/green] - Capture | [yellow]R[/yellow] - Refresh | [red]Q[/red] - Quit",
-            box=box.ROUNDED,
-            height=3
-        )
-        
-        self.console.print(header)
-        self.console.print(stats_panel)
-        self.console.print(recent_panel)
-        self.console.print(footer)
+        panel = Panel(content, box=box.ROUNDED, padding=(1, 2))
+        self.console.print(panel)
     
     def view_simple(self) -> str:
         status_icon = "🟢" if self.model.camera_ready else "🔴"
